@@ -13,10 +13,11 @@ Usage:
     1. Enter the image file path.
     2. Select the brightness scale (1-25).
     3. Optionally resize the image.
-    The ASCII art will be printed to the console.
+    The ASCII art will be printed to the console and can optionally be saved.
 """
 
 import os
+import sys
 from typing import List, Tuple
 from PIL import Image
 
@@ -72,46 +73,29 @@ valid_formats = (
     ".xpm",
 )
 
-
-def calculate_brightness(img_data: List[Tuple[int, int, int]]) -> List[int]:
+def render_ascii_art(b_values: list[int], width: int, b_scale: str) -> str:
     """
-    Calculate the brightness of each pixel in an RGB image.
-
-    Brightness is computed as a weighted sum of the R, G, and B channels:
-    brightness = 0.33*R + 0.5*G + 0.16*B
-
-    Args:
-        img_data (list[tuple]): A list of (R, G, B) pixel tuples.
-
-    Returns:
-        list[int]: A list of brightness values (0-255) for each pixel.
-    """
-    px_bright = []
-    for px in img_data:
-        r, g, b = px
-        bright = 0.33 * r + 0.5 * g + 0.16 * b
-        px_bright.append(int(round(bright)))
-    return px_bright
-
-
-def render_ascii_art(b_values: List[int], width: int, b_scale: str) -> None:
-    """
-    Render ASCII art to the console based on pixel brightness.
+    Generate ASCII art string based on pixel brightness.
 
     Args:
         b_values (list[int]): List of brightness values per pixel.
         width (int): Width of the image (used for line breaks).
         b_scale (str): A string of ASCII characters for mapping brightness.
+
+    Returns:
+        str: The generated ASCII art.
     """
     scale_length = len(b_scale)
+    art_lines = []
+    line = ""
     for i, px in enumerate(b_values):
         if i % width == 0 and i != 0:
-            print()
-        if px == 0:
-            px_index = 0
-        else:
-            px_index = int(px / (255 / scale_length))
-        print(b_scale[px_index], end=" ")
+            art_lines.append(line)
+            line = ""
+        px_index = min(scale_length - 1, int(px / (256 / scale_length)))
+        line += b_scale[px_index] + " "
+    art_lines.append(line)
+    return "\n".join(art_lines)
 
 
 def main() -> None:
@@ -123,33 +107,49 @@ def main() -> None:
         - Brightness scale (1-25)
         - Whether to resize the image
 
-    Then displays the ASCII art in the console.
+    Then displays the ASCII art in the console and offers to save it.
     """
-    img_path = input("Image path: ")
+    img_path = input("Image path: ").strip()
     if not os.path.isfile(img_path):
-        raise FileNotFoundError("File path does not exist.")
+        print("File path does not exist.")
+        return
     file_ext = os.path.splitext(img_path)[1].lower()
     if file_ext not in valid_formats:
-        raise IOError("Unsupported image file format.")
-    b_key = input("Brightness scale (1-25): ")
-    if b_key not in ascii_b_scale:
-        raise ValueError("Brightness scale must be 1-25.")
+        print("Unsupported image file format.")
+        return
+    while True:
+        b_key = input("Brightness scale (1-25): ").strip()
+        if b_key in ascii_b_scale:
+            break
+        print("Invalid scale. Enter a number between 1 and 25.")
     b_scale = ascii_b_scale[b_key]
-    with Image.open(img_path).convert("RGB") as img:
-        print(f"Image size: {img.width}x{img.height}")
-        resize_choice = input("Resize image? (Y/n): ").strip().upper()
-        if resize_choice == "Y":
-            width = int(input("New width: "))
-            height = int(input("New height: "))
-            img = img.resize((width, height))
-        else:
-            width, height = img.width, img.height
-        data = list(img.getdata())
-        b_values = calculate_brightness(data)
-        os.system("cls")
-        render_ascii_art(b_values, width, b_scale)
+    try:
+        with Image.open(img_path).convert("L") as img:
+            print(f"Image size: {img.width}x{img.height}")
+            resize_choice = input("Resize image? (Y/n): ").strip().upper()
+            if resize_choice == "Y":
+                width = int(input("New width: "))
+                height = int(input("New height: "))
+                img = img.resize((width, height))
+            else:
+                width, height = img.width, img.height
+            b_values = list(img.getdata())
+    except Exception as e:
+        print(f"Error opening image: {e}")
+        return
+    os.system("cls" if os.name == "nt" else "clear")
+    art = render_ascii_art(b_values, width, b_scale)
+    print(art)
+    save_choice = input("\nSave ASCII art to file? (Y/n): ").strip().upper()
+    if save_choice == "Y":
+        output_file = "ascii_art.txt"
+        try:
+            with open(output_file, "w") as f:
+                f.write(art)
+            print(f"ASCII art saved to '{output_file}'.")
+        except IOError as e:
+            print(f"Failed to save file: {e}")
     input("\nPress Enter to exit.")
-
 
 if __name__ == "__main__":
     main()
